@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hotel Reservation System</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <h1>Hotel Reservation System</h1>
+        <p>Create a new reservation or look up an existing one.</p>
+      </header>
+
+      <nav class="tabs" aria-label="Reservation screens">
+        <button class="tab-button active" data-view="new-reservation">New Reservation</button>
+        <button class="tab-button" data-view="lookup">Reservation Lookup</button>
+      </nav>
+
+      <main>
+        <section id="new-reservation" class="view active">
+          <form id="reservation-form" class="card">
+            <h2>New Reservation</h2>
+            <div class="form-group">
+              <label for="hotel">Hotel</label>
+              <select id="hotel" required>
+                <option value="">Select a hotel</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="fullName">Full Name</label>
+              <input id="fullName" name="fullName" type="text" required />
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <input id="email" name="email" type="email" required />
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="checkIn">Check-In Date</label>
+                <input id="checkIn" name="checkIn" type="date" required />
+              </div>
+              <div class="form-group">
+                <label for="checkOut">Check-Out Date</label>
+                <input id="checkOut" name="checkOut" type="date" required />
+              </div>
+            </div>
+
+            <button type="submit" class="primary-btn">Complete Reservation</button>
+            <p id="reservation-message" class="message" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section id="lookup" class="view">
+          <div class="card">
+            <h2>Reservation Lookup</h2>
+            <form id="lookup-form">
+              <div class="form-group">
+                <label for="lookupTerm">Reservation ID</label>
+                <input id="lookupTerm" name="lookupTerm" type="text" placeholder="e.g. 6a428df2147eb2f182af8acc" required />
+              </div>
+              <button type="submit" class="primary-btn">Find Reservation</button>
+            </form>
+            <p id="lookup-message" class="message" aria-live="polite"></p>
+            <div id="lookup-results"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- API base URL is injected at runtime via config.js.
+         Locally this file ships a localhost default; in Kubernetes it is
+         overridden by the hotel-frontend-config ConfigMap. Must load before app.js. -->
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

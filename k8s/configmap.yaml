@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hotel-frontend-config
+  namespace: hotel
+  labels:
+    app: hotel-frontend
+data:
+  # This file is mounted over /usr/share/nginx/html/config.js in the Pod and is
+  # loaded by index.html before app.js. It is the ONLY place the API base lives.
+  #
+  # A RELATIVE path ("/api") means the browser calls the SAME host it loaded the
+  # page from, under /api — so no hard-coded backend hostname is needed and the
+  # browser-vs-internal-DNS problem disappears. The Ingress must route /api on
+  # this host to the hotel-backend Service (and strip/rewrite the /api prefix if
+  # the backend does not serve its routes under /api).
+  config.js: |
+    window.__API_BASE__ = "/api";
