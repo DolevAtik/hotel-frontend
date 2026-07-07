@@ -54,7 +54,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ github.run_number }}
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
 
       - name: Pin deployment manifest to the new immutable tag
