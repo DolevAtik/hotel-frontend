@@ -4,9 +4,24 @@ on:
   push:
     branches:
       - dev
+    # Only rebuild when the app image or the pipeline itself changes.
+    # Excludes k8s/ so the manifest commit made by this workflow can't retrigger it.
+    paths:
+      - 'index.html'
+      - 'styles.css'
+      - 'app.js'
+      - 'config.js'
+      - 'Dockerfile'
+      - '.github/workflows/frontend-ci.yml'
 
+# Needs write access to commit the updated image tag back to git for ArgoCD.
 permissions:
-  contents: read
+  contents: write
+
+# Serialize runs on the same branch so image push + manifest commit never race.
+concurrency:
+  group: frontend-ci-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   IMAGE_NAME: dolevatik/hotel-frontend
@@ -32,6 +47,24 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
-            dolevatik/hotel-frontend:${{ github.run_number }}
-            dolevatik/hotel-frontend:latest
+            ${{ env.IMAGE_NAME }}:${{ github.run_number }}
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Pin deployment manifest to the new immutable tag
+        run: |
+          sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${{ github.run_number }}|" k8s/deployment.yaml
+
+      - name: Commit manifest update for ArgoCD
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet k8s/deployment.yaml; then
+            echo "Manifest already at target tag; nothing to commit."
+          else
+            git add k8s/deployment.yaml
+            git commit -m "ci: deploy frontend ${IMAGE_NAME}:${{ github.run_number }} [skip ci]"
+            git push
+          fi
