@@ -5,7 +5,6 @@ on:
     branches:
       - dev
     # Only rebuild when the app image or the pipeline itself changes.
-    # Excludes k8s/ so the manifest commit made by this workflow can't retrigger it.
     paths:
       - 'index.html'
       - 'styles.css'
@@ -14,20 +13,16 @@ on:
       - 'Dockerfile'
       - '.github/workflows/frontend-ci.yml'
 
-# Needs write access to commit the updated image tag back to git for ArgoCD.
+# GitOps: this pipeline no longer commits to this repo. It opens a PR against
+# hotel-infra to bump the image tag, so only read access is needed here.
 permissions:
-  contents: write
-
-# Serialize runs on the same branch so image push + manifest commit never race.
-concurrency:
-  group: frontend-ci-${{ github.ref }}
-  cancel-in-progress: false
+  contents: read
 
 env:
   IMAGE_NAME: dolevatik/hotel-frontend
 
 jobs:
-  docker:
+  build-and-push:
     name: Build and Push Frontend Image
     runs-on: ubuntu-latest
 
@@ -57,18 +52,33 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
 
-      - name: Pin deployment manifest to the new immutable tag
-        run: |
-          sed -i "s|image: ${IMAGE_NAME}:.*|image: ${IMAGE_NAME}:${{ github.run_number }}|" k8s/deployment.yaml
+  update-infra:
+    name: Update Infra Manifests
+    needs: build-and-push
+    runs-on: ubuntu-latest
 
-      - name: Commit manifest update for ArgoCD
+    steps:
+      - name: Checkout hotel-infra
+        uses: actions/checkout@v4
+        with:
+          repository: DolevAtik/hotel-infra
+          token: ${{ secrets.PAT }}
+          path: infra
+
+      - name: Update Frontend Image
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet k8s/deployment.yaml; then
-            echo "Manifest already at target tag; nothing to commit."
-          else
-            git add k8s/deployment.yaml
-            git commit -m "ci: deploy frontend ${IMAGE_NAME}:${{ github.run_number }} [skip ci]"
-            git push
-          fi
+          cd infra
+          sed -i "s|image: dolevatik/hotel-frontend:.*|image: dolevatik/hotel-frontend:${{ github.sha }}|g" k8s/frontend/deployment.yaml
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.PAT }}
+          path: infra
+          branch: frontend-${{ github.sha }}
+          base: main
+          commit-message: "Update frontend image to ${{ github.sha }}"
+          title: "Update frontend image to ${{ github.sha }}"
+          body: |
+            Automated update from Frontend CI
+          delete-branch: true

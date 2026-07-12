@@ -1,5 +1,6 @@
 // API base URL. Defaults to the local backend; can be overridden at runtime
 // (e.g. by an injected <script>window.__API_BASE__ = "..."</script> in index.html).
+// GitOps Test 2026-07-12 — frontend pipeline verification marker
 const API_BASE = (window.__API_BASE__ || 'http://localhost:5000').replace(/\/$/, '');
 
 const reservationForm = document.getElementById('reservation-form');
