@@ -13,8 +13,9 @@ on:
       - 'Dockerfile'
       - '.github/workflows/frontend-ci.yml'
 
-# GitOps: this pipeline no longer commits to this repo. It opens a PR against
-# hotel-infra to bump the image tag, so only read access is needed here.
+# GitOps: this pipeline no longer commits to this repo. It pushes the image-tag
+# bump straight to hotel-infra's main (using secrets.PAT), so only read access
+# is needed here.
 permissions:
   contents: read
 
@@ -62,6 +63,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: DolevAtik/hotel-infra
+          ref: main
           token: ${{ secrets.PAT }}
           path: infra
 
@@ -70,15 +72,30 @@ jobs:
           cd infra
           sed -i "s|image: dolevatik/hotel-frontend:.*|image: dolevatik/hotel-frontend:${{ github.sha }}|g" k8s/frontend/deployment.yaml
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.PAT }}
-          path: infra
-          branch: frontend-${{ github.sha }}
-          base: main
-          commit-message: "Update frontend image to ${{ github.sha }}"
-          title: "Update frontend image to ${{ github.sha }}"
-          body: |
-            Automated update from Frontend CI
-          delete-branch: true
+      # Push straight to main so ArgoCD (which tracks main) picks the bump up
+      # on its next sync. No PR, no manual merge step.
+      - name: Commit and Push to main
+        working-directory: infra
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet; then
+            echo "Manifest already pinned to ${{ github.sha }} - nothing to push."
+            exit 0
+          fi
+
+          git commit -am "Update frontend image to ${{ github.sha }}"
+
+          # Retry in case the backend pipeline pushed to main in the meantime.
+          for attempt in 1 2 3; do
+            if git push origin main; then
+              echo "Pushed frontend image bump to main."
+              exit 0
+            fi
+            echo "Push rejected (attempt $attempt) - rebasing onto latest main."
+            git pull --rebase origin main
+          done
+
+          echo "Failed to push to main after 3 attempts."
+          exit 1
