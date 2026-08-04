@@ -1,0 +1,84 @@
+name: Frontend CI Pipeline
+
+on:
+  push:
+    branches:
+      - dev
+    # Only rebuild when the app image or the pipeline itself changes.
+    paths:
+      - 'index.html'
+      - 'styles.css'
+      - 'app.js'
+      - 'config.js'
+      - 'Dockerfile'
+      - '.github/workflows/frontend-ci.yml'
+
+# GitOps: this pipeline no longer commits to this repo. It opens a PR against
+# hotel-infra to bump the image tag, so only read access is needed here.
+permissions:
+  contents: read
+
+env:
+  IMAGE_NAME: dolevatik/hotel-frontend
+
+jobs:
+  build-and-push:
+    name: Build and Push Frontend Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # Sets up the docker-container driver, required for the type=gha cache backend.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+
+  update-infra:
+    name: Update Infra Manifests
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout hotel-infra
+        uses: actions/checkout@v4
+        with:
+          repository: DolevAtik/hotel-infra
+          token: ${{ secrets.PAT }}
+          path: infra
+
+      - name: Update Frontend Image
+        run: |
+          cd infra
+          sed -i "s|image: dolevatik/hotel-frontend:.*|image: dolevatik/hotel-frontend:${{ github.sha }}|g" k8s/frontend/deployment.yaml
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.PAT }}
+          path: infra
+          branch: frontend-${{ github.sha }}
+          base: main
+          commit-message: "Update frontend image to ${{ github.sha }}"
+          title: "Update frontend image to ${{ github.sha }}"
+          body: |
+            Automated update from Frontend CI
+          delete-branch: true
